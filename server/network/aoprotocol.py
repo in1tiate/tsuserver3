@@ -458,7 +458,7 @@ class AOProtocol(asyncio.Protocol):
                     "While that is not a blankpost, it is still pretty spammy. Try forming sentences."
                 )
                 return
-        if text.startswith('/a '):
+        if text.startswith('/a '): # Send a message to a specific area the client is CM in
             part = text.split(' ')
             try:
                 aid = int(part[1])
@@ -473,7 +473,7 @@ class AOProtocol(asyncio.Protocol):
                 self.client.send_ooc(
                     "That does not look like a valid area ID!")
                 return
-        elif text.startswith('/s '):
+        elif text.startswith('/s '): # Send a message to all areas client is CM in
             part = text.split(' ')
             for a in self.server.area_manager.areas:
                 if self.client in a.owners:
@@ -482,6 +482,65 @@ class AOProtocol(asyncio.Protocol):
                 self.client.send_ooc('You don\'t any areas!')
                 return
             text = ' '.join(part[1:])
+        elif text.startswith('/testify '): # Start a new testimony in this area.
+            part = text.split(' ')
+            text = ' '.join(part[1:]) # remove command
+            if not self.client.area.start_testimony(self.client, text):
+                return
+            text = '~~-- ' + text + ' --'
+            color = 3 # orange
+        elif text.startswith('/examine'): # Start an examination of this area's testimony.
+            if not self.client.area.start_examination(self.client):
+                return
+            text = '~~-- ' + self.client.area.testimony.title + ' --'
+            color = 3
+        if self.client.area.is_testifying or self.client.area.is_examining:
+            if text.startswith('/end'): # End the current testimony or examination.
+                if not self.client.area.end_testimony(self.client):
+                    return
+                text = ''
+            elif text.startswith('/amend '):
+                part = text.split(' ')
+                text = ' '.join(part[2:])
+                args[4] = text
+                color = 1
+                try:
+                    index = int(part[1])
+                    if not self.client.area.amend_testimony(self.client, index, args):
+                        return
+                    if self.client.area.is_testifying:
+                        return # don't send it again or it'll be rerecorded
+                    elif self.client.area.is_examining:
+                        self.client.area.examine_index = index # jump to the amended statement
+                except ValueError:
+                    self.client.send_ooc(
+                        "That does not look like a valid statement number!")
+                    return
+            elif text.startswith('/add ') and self.client.area.is_examining:
+                part = text.split(' ')
+                text = ' '.join(part[1:])
+                args[4] = text
+                self.client.area.testimony.add_statement(tuple(args))
+                color = 1 # green
+                self.client.area.examine_index = len(self.client.area.testimony.statements) - 1 # jump to the new statement
+            elif text.startswith('/remove '):
+                part = text.split(' ')
+                try:
+                    index = int(part[1])
+                    if not self.client.area.remove_statement(self.client, index):
+                        return
+                    text = ''
+                except ValueError:
+                    self.client.send_ooc(
+                        "That does not look like a valid statement number!")
+                    return
+            if self.client.area.is_examining and text[0] in ['>', '<', '=']:
+                try:
+                    self.client.area.navigate_testimony(self.client, text[0], int(text[1:]))
+                except ValueError:
+                    self.client.area.navigate_testimony(self.client, text[0], None)
+                return
+                
         if msg_type not in ('chat', '0', '1'):
             return
         if anim_type == 4:
@@ -620,6 +679,8 @@ class AOProtocol(asyncio.Protocol):
             database.log_ic(self.client, self.client.area, showname, msg)
         if (self.client.area.is_recording):
             self.client.area.recorded_messages.append(args)
+        if self.client.area.is_testifying:
+            self.client.area.testimony.add_statement(send_args)
 
     def net_cmd_ct(self, args):
         """OOC Message
