@@ -549,6 +549,9 @@ class AreaManager:
                 client.send_ooc('You don\'t own this area!')
                 return False
             elif self.is_testifying:
+                if not self.testimony.statements:
+                    client.send_ooc('Please add at least one statement before ending your testimony.')
+                    return False
                 self.is_testifying = False
                 self.broadcast_ooc('Recording stopped.')
                 return True
@@ -595,6 +598,9 @@ class AreaManager:
             Navigate the current testimony using the commands >, <, =, and [>|<]<index>.
             Returns False if the navigation was unsuccessful.
             """
+            if not self.testimony.statements:
+                client.send_ooc('Testimony is empty, can\'t navigate!')
+                return False
             if index == None:
                 if command == '=':
                     if self.examine_index == 0:
@@ -618,6 +624,7 @@ class AreaManager:
                     client.send_ooc("That does not look like a valid statement number!")
                     return False
             self.send_command('MS', *self.testimony.statements[self.examine_index])
+            return True
                 
         class JukeboxVote:
             """Represents a single vote cast for the jukebox."""
