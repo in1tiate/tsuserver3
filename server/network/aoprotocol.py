@@ -32,6 +32,10 @@ logger_debug = logging.getLogger('debug')
 logger = logging.getLogger('events')
 
 
+class ProtocolError(Exception):
+    pass
+
+
 class AOProtocol(asyncio.Protocol):
     """The main class that deals with the AO protocol."""
 
@@ -96,21 +100,26 @@ class AOProtocol(asyncio.Protocol):
 
         if len(self.buffer) > 8192:
             self.client.disconnect()
-        for msg in self.get_messages():
-            if len(msg) < 2:
-                continue
-            # general netcode structure is not great
-            if msg[0] in ('#', '3', '4'):
-                if msg[0] == '#':
-                    msg = msg[1:]
-                spl = msg.split('#', 1)
-                msg = '#'.join([fanta_decrypt(spl[0])] + spl[1:])
-            try:
-                cmd, *args = msg.split('#')
-                self.net_cmd_dispatcher[cmd](self, args)
-            except KeyError:
-                logger_debug.debug(
-                    f'Unknown incoming message from {ipid}: {msg}')
+        try:
+            for msg in self.get_messages():
+                if len(msg) < 2:
+                    continue
+                # general netcode structure is not great
+                if msg[0] in ('#', '3', '4'):
+                    if msg[0] == '#':
+                        msg = msg[1:]
+                    spl = msg.split('#', 1)
+                    msg = '#'.join([fanta_decrypt(spl[0])] + spl[1:])
+                try:
+                    cmd, *args = msg.split('#')
+                    self.net_cmd_dispatcher[cmd](self, args)
+                except KeyError:
+                    logger_debug.debug(
+                        f'Unknown incoming message from {ipid}: {msg}')
+                    if not self.client.is_checked:
+                        raise ProtocolError
+        except ProtocolError:
+            self.client.disconnect()
 
     def connection_made(self, transport):
         """Called upon a new client connecting
@@ -156,6 +165,10 @@ class AOProtocol(asyncio.Protocol):
         :return: yields messages
 
         """
+        # Long header - not likely to be a valid message
+        if len(self.buffer) >= 24 and '#' not in self.buffer[:24]:
+            raise ProtocolError
+
         while '#%' in self.buffer:
             spl = self.buffer.split('#%', 1)
             self.buffer = spl[1]
@@ -233,7 +246,7 @@ class AOProtocol(asyncio.Protocol):
                                  'flipping', 'fastloading', 'noencryption',
                                  'deskmod', 'evidence', 'modcall_reason',
                                  'cccc_ic_support', 'arup', 'casing_alerts',
-                                 'prezoom', 'looping_sfx', 'additive', 'effects')
+                                 'prezoom', 'looping_sfx', 'additive', 'effects', 'expanded_desk_mods')
 
     def net_cmd_ch(self, _):
         """Reset the client drop timeout (keepalive).
@@ -482,7 +495,7 @@ class AOProtocol(asyncio.Protocol):
                 self.client.send_ooc('You don\'t any areas!')
                 return
             text = ' '.join(part[1:])
-        if msg_type not in ('chat', '0', '1'):
+        if msg_type not in ('chat', '0', '1', '2', '3', '4', '5'):
             return
         if anim_type == 4:
             anim_type = 6
@@ -740,8 +753,8 @@ class AOProtocol(asyncio.Protocol):
                 )
                 return
             try:
-                if args[0] == "~stop.mp3":
-                    name, length = args[0], 0
+                if args[0] == "~stop.mp3" or self.server.get_song_is_category(self.server.music_list, args[0]):
+                    name, length = "~stop.mp3", 0
                 else:
                     name, length = self.server.get_song_data(
                         self.server.music_list, args[0])
