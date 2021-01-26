@@ -28,6 +28,8 @@ from server.exceptions import AreaError
 from server.evidence import EvidenceList
 from server.client_manager import ClientManager
 
+import logging
+logger_debug = logging.getLogger('debug')
 
 class AreaManager:
     """Holds the list of all areas."""
@@ -126,6 +128,7 @@ class AreaManager:
                 self.change_status('IDLE')
             if client.char_id != -1:
                 database.log_room('area.leave', client, self)
+            self.server.area_manager.send_arup_players()
 
         def unlock(self):
             """Mark the area as unlocked."""
