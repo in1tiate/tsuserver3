@@ -206,6 +206,10 @@ class AOProtocol(asyncio.Protocol):
         :param args: a list containing all the arguments
 
         """
+        if self.client.is_checked:
+            self.client.disconnect()
+            return
+
         if not self.validate_net_cmd(args, self.ArgType.STR, needs_auth=False):
             return
         hdid = self.client.hdid = args[0]
@@ -450,6 +454,8 @@ class AOProtocol(asyncio.Protocol):
             self.client.send_ooc(
                 "Showname changes are forbidden in this area!")
             return
+        else:
+            self.client.showname = showname
         if self.client.area.is_iniswap(self.client, pre, anim,
                                        folder, sfx):
             self.client.send_ooc(
