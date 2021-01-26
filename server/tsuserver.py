@@ -235,6 +235,8 @@ class TsuServer3:
             self.config['multiclient_limit'] = 16
         if 'buffer_mode' not in self.config:
             self.config['buffer_mode'] = False  # old behaviour is the default
+        if 'testimony_limit' not in self.config:
+            self.config['testimony_limit'] = 30
 
     def load_characters(self):
         """Load the character list from a YAML file."""
